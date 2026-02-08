@@ -1,8 +1,11 @@
 # Shortcut Pad
 
+Made this for fun during my free time
+I'll update it sporatically and when I find edge cases/bugs or if something breaks
+
 A programmable auxiliary keyboard designed for custom workflows, productivity, and creative applications.
 
-Circuits and PCB:  Too lazy to put onto oshwlab
+Circuits and PCB:  Too lazy to upload onto oshwlab
 
 ---
 
