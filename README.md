@@ -2,8 +2,7 @@
 
 A programmable auxiliary keyboard designed for custom workflows, productivity, and creative applications.
 
-Circuits and PCB:  
-(will add later)
+Circuits and PCB:  Too lazy to put onto oshwlab
 
 ---
 
