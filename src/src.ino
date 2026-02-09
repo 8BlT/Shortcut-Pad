@@ -6,192 +6,136 @@
 #define LONG_PRESS_MS 420
 #define DOUBLE_TAP_MS 380
 #define MACRO_COOLDOWN_MS 80
-#define EEPROM_MAGIC 0xAB
-#define EEPROM_ADDR_MAGIC 0
-#define EEPROM_ADDR_LAYER 1
-
-#define LAYER_GIT 1
-#define LAYER_EDITOR 2
-#define LAYER_MEDIA 3
-
-#define BTN_COUNT 9
-
-const int encoderA = 7;
-const int encoderB = 6;
-const int rightPin = 11;
-const int leftPin = 12;
-const int layer1Pin = 9;
-const int layer2Pin = 8;
-const int layer3Pin = 2;
-const int key1Pin = 5;
-const int key2Pin = 4;
-const int key3Pin = 3;
-const int key4Pin = 10;
-const int profile1LED = 15;
-const int profile2LED = 16;
-const int profile3LED = 17;
-const int key1LED = 18;
-const int key2LED = 19;
-const int key3LED = 20;
-const int key4LED = 21;
-
-int layer = LAYER_GIT;
-int key1State = LOW;
-int key2State = LOW;
-int key3State = LOW;
-int key4State = LOW;
-
-int encoderALast = LOW;
-unsigned long lastEncoderStep = 0;
-bool layer3ScrollMod = false;
-bool layer3ZoomMod = false;
-
-bool btnPrev[BTN_COUNT];
-unsigned long btnPressTime[BTN_COUNT];
-unsigned long pressPendingTime[BTN_COUNT];
-bool btnLongFired[BTN_COUNT];
-unsigned long lastTapTime[BTN_COUNT];
-unsigned long lastMacroTime = 0;
-unsigned long macroBlinkUntil = 0;
-
-bool fwShift = false;
-bool fwCtrl = false;
-bool fwAlt = false;
-bool fwGui = false;
-
-bool fwMouseLeft = false;
-bool fwMouseRight = false;
-bool fwMouseMiddle = false;
-
-bool allowDoubleTap[BTN_COUNT] = {
-  false, // layer1
-  false, // layer2
-  false, // layer3
-  false, // key1
-  false, // key2
-  false, // key3
-  true,  // key4
-  false, // left
-  false  // right
-};
-
 #define MACRO_BLINK_MS 80
 #define PULSE_MS 200
 #define ENCODER_RATE_MS 5
+#define EEPROM_MAGIC 0xAB
+#define EEPROM_ADDR_MAGIC 0
+#define EEPROM_ADDR_LAYER 1
 #define EEPROM_WRITE_INTERVAL_MS 1000
+
+#define LAYER_GIT 0
+#define LAYER_EDITOR 1
+#define LAYER_MEDIA 2
+#define LAYER_COUNT 3
+
+#define BTN_COUNT 9
+#define BTN_LAYER1 0
+#define BTN_LAYER2 1
+#define BTN_LAYER3 2
+#define BTN_KEY1 3
+#define BTN_KEY2 4
+#define BTN_KEY3 5
+#define BTN_KEY4 6
+#define BTN_LEFT 7
+#define BTN_RIGHT 8
+
+#define LED_COUNT 7
+
+const int btnPins[BTN_COUNT] = { 9, 8, 2, 5, 4, 3, 10, 12, 11 };
+const int ledPins[LED_COUNT] = { 15, 16, 17, 18, 19, 20, 21 };
+const int encoderA = 7;
+const int encoderB = 6;
+
+bool allowDoubleTap[BTN_COUNT] = {
+  false, false, false,
+  false, false, false, true,
+  false, false
+};
+
+struct ModState {
+  bool shift;
+  bool ctrl;
+  bool alt;
+  bool gui;
+  bool mouseLeft;
+  bool mouseRight;
+  bool mouseMiddle;
+};
+
+struct ButtonState {
+  bool prev[BTN_COUNT];
+  unsigned long pressTime[BTN_COUNT];
+  unsigned long pendingTime[BTN_COUNT];
+  bool longFired[BTN_COUNT];
+  unsigned long lastTap[BTN_COUNT];
+};
+
+ModState mod = {};
+ButtonState btn = {};
+
+int layer = LAYER_GIT;
+int encoderALast = LOW;
+unsigned long lastEncoderStep = 0;
+unsigned long lastMacroTime = 0;
+unsigned long macroBlinkUntil = 0;
+unsigned long lastEEPROMWrite = 0;
+bool layer3ZoomMod = false;
+bool layer3ScrollMod = false;
 
 void fwPressKey(uint8_t key) {
   Keyboard.press(key);
-  if (key == KEY_LEFT_SHIFT) fwShift = true;
-  if (key == KEY_LEFT_CTRL) fwCtrl = true;
-  if (key == KEY_LEFT_ALT) fwAlt = true;
-  if (key == KEY_LEFT_GUI) fwGui = true;
+  if (key == KEY_LEFT_SHIFT) mod.shift = true;
+  else if (key == KEY_LEFT_CTRL) mod.ctrl = true;
+  else if (key == KEY_LEFT_ALT) mod.alt = true;
+  else if (key == KEY_LEFT_GUI) mod.gui = true;
 }
 
 void fwReleaseKey(uint8_t key) {
   Keyboard.release(key);
-  if (key == KEY_LEFT_SHIFT) fwShift = false;
-  if (key == KEY_LEFT_CTRL) fwCtrl = false;
-  if (key == KEY_LEFT_ALT) fwAlt = false;
-  if (key == KEY_LEFT_GUI) fwGui = false;
+  if (key == KEY_LEFT_SHIFT) mod.shift = false;
+  else if (key == KEY_LEFT_CTRL) mod.ctrl = false;
+  else if (key == KEY_LEFT_ALT) mod.alt = false;
+  else if (key == KEY_LEFT_GUI) mod.gui = false;
 }
 
-void fwMousePress(uint8_t btn) {
-  Mouse.press(btn);
-  if (btn == MOUSE_LEFT) fwMouseLeft = true;
-  if (btn == MOUSE_RIGHT) fwMouseRight = true;
-  if (btn == MOUSE_MIDDLE) fwMouseMiddle = true;
+void fwMousePress(uint8_t b) {
+  Mouse.press(b);
+  if (b == MOUSE_LEFT) mod.mouseLeft = true;
+  else if (b == MOUSE_RIGHT) mod.mouseRight = true;
+  else if (b == MOUSE_MIDDLE) mod.mouseMiddle = true;
 }
 
-void fwMouseRelease(uint8_t btn) {
-  Mouse.release(btn);
-  if (btn == MOUSE_LEFT) fwMouseLeft = false;
-  if (btn == MOUSE_RIGHT) fwMouseRight = false;
-  if (btn == MOUSE_MIDDLE) fwMouseMiddle = false;
+void fwMouseRelease(uint8_t b) {
+  Mouse.release(b);
+  if (b == MOUSE_LEFT) mod.mouseLeft = false;
+  else if (b == MOUSE_RIGHT) mod.mouseRight = false;
+  else if (b == MOUSE_MIDDLE) mod.mouseMiddle = false;
 }
 
-void setup() {
-  pinMode(encoderA, INPUT_PULLUP);
-  pinMode(encoderB, INPUT_PULLUP);
-  pinMode(layer1Pin, INPUT_PULLUP);
-  pinMode(layer2Pin, INPUT_PULLUP);
-  pinMode(layer3Pin, INPUT_PULLUP);
-  pinMode(key1Pin, INPUT_PULLUP);
-  pinMode(key2Pin, INPUT_PULLUP);
-  pinMode(key3Pin, INPUT_PULLUP);
-  pinMode(key4Pin, INPUT_PULLUP);
-  pinMode(leftPin, INPUT_PULLUP);
-  pinMode(rightPin, INPUT_PULLUP);
-  pinMode(profile1LED, OUTPUT);
-  pinMode(profile2LED, OUTPUT);
-  pinMode(profile3LED, OUTPUT);
-  pinMode(key1LED, OUTPUT);
-  pinMode(key2LED, OUTPUT);
-  pinMode(key3LED, OUTPUT);
-  pinMode(key4LED, OUTPUT);
-  if (EEPROM.read(EEPROM_ADDR_MAGIC) == EEPROM_MAGIC) {
-    int saved = EEPROM.read(EEPROM_ADDR_LAYER);
-    if (saved >= LAYER_GIT && saved <= LAYER_MEDIA) layer = saved;
-  }
-  Keyboard.begin();
-  Mouse.begin();
-  ledDance();
-  const int setupPins[] = { layer1Pin, layer2Pin, layer3Pin, key1Pin, key2Pin, key3Pin, key4Pin, leftPin, rightPin };
-  for (int i = 0; i < BTN_COUNT; i++) {
-    btnPrev[i] = (digitalRead(setupPins[i]) == LOW);
-    btnPressTime[i] = 0;
-    pressPendingTime[i] = 0;
-    btnLongFired[i] = false;
-    lastTapTime[i] = 0;
-  }
+void releaseModKeys() {
+  if (mod.shift) fwReleaseKey(KEY_LEFT_SHIFT);
+  if (mod.ctrl) fwReleaseKey(KEY_LEFT_CTRL);
+  if (mod.alt) fwReleaseKey(KEY_LEFT_ALT);
+  if (mod.gui) fwReleaseKey(KEY_LEFT_GUI);
+  if (mod.mouseLeft) fwMouseRelease(MOUSE_LEFT);
+  if (mod.mouseRight) fwMouseRelease(MOUSE_RIGHT);
+  if (mod.mouseMiddle) fwMouseRelease(MOUSE_MIDDLE);
 }
-void ledDance() {
-  digitalWrite(key1LED, HIGH);
-  delay(200);
-  digitalWrite(key1LED, LOW);
-  digitalWrite(profile1LED, HIGH);
-  delay(200);
-  digitalWrite(profile1LED, LOW);
-  digitalWrite(key2LED, HIGH);
-  delay(200);
-  digitalWrite(key2LED, LOW);
-  digitalWrite(profile2LED, HIGH);
-  delay(200);
-  digitalWrite(profile2LED, LOW);
-  digitalWrite(key3LED, HIGH);
-  delay(200);
-  digitalWrite(key3LED, LOW);
-  digitalWrite(profile3LED, HIGH);
-  delay(200);
-  digitalWrite(profile3LED, LOW);
-  digitalWrite(key4LED, HIGH);
-  delay(200);
-  digitalWrite(key4LED, LOW);
-  digitalWrite(profile3LED, HIGH);
-  delay(200);
-  digitalWrite(profile3LED, LOW);
-  digitalWrite(key3LED, HIGH);
-  delay(200);
-  digitalWrite(key3LED, LOW);
-  digitalWrite(profile2LED, HIGH);
-  delay(200);
-  digitalWrite(profile2LED, LOW);
-  digitalWrite(key2LED, HIGH);
-  delay(200);
-  digitalWrite(key2LED, LOW);
-  digitalWrite(profile1LED, HIGH);
-  delay(200);
-  digitalWrite(profile1LED, LOW);
-  digitalWrite(key1LED, HIGH);
-  delay(200);
-  digitalWrite(key1LED, LOW);
 
-  updateLED();
+bool cooldown() {
+  if (millis() - lastMacroTime < MACRO_COOLDOWN_MS) return true;
+  lastMacroTime = millis();
+  return false;
+}
+
+void sendChord(uint8_t mod1, uint8_t mod2, uint8_t key) {
+  if (cooldown()) return;
+  fwPressKey(mod1);
+  if (mod2) fwPressKey(mod2);
+  Keyboard.press(key);
+  Keyboard.release(key);
+  if (mod2) fwReleaseKey(mod2);
+  fwReleaseKey(mod1);
+}
+
+void sendString(const char* str, bool enter) {
+  if (cooldown()) return;
+  Keyboard.print(str);
+  if (enter) Keyboard.write(KEY_RETURN);
 }
 
 int getLayer() { return layer; }
-
-static unsigned long lastEEPROMWrite = 0;
 
 void setLayer(int L) {
   if (L == layer) return;
@@ -204,157 +148,33 @@ void setLayer(int L) {
   updateLED();
 }
 
-void releaseModKeys() {
-  if (fwShift) fwReleaseKey(KEY_LEFT_SHIFT);
-  if (fwCtrl) fwReleaseKey(KEY_LEFT_CTRL);
-  if (fwAlt) fwReleaseKey(KEY_LEFT_ALT);
-  if (fwGui) fwReleaseKey(KEY_LEFT_GUI);
+void doGitPull()         { sendString("git pull", true); }
+void doGitPush()         { sendString("git push", true); }
+void doGitStatus()       { sendString("git status", true); }
+void doGitCommit()       { sendString("git commit -m \"", false); }
+void doGitCheckoutMain() { sendString("git checkout main", true); }
+void doGitCheckoutB()    { sendString("git checkout -b ", false); }
+void doGitLog5()         { sendString("git log --oneline -5", true); }
 
-  if (fwMouseLeft) fwMouseRelease(MOUSE_LEFT);
-  if (fwMouseRight) fwMouseRelease(MOUSE_RIGHT);
-  if (fwMouseMiddle) fwMouseRelease(MOUSE_MIDDLE);
-}
-
-bool cooldown() {
-  if (millis() - lastMacroTime < MACRO_COOLDOWN_MS) return true;
-  lastMacroTime = millis();
-  return false;
-}
-
-void doGitPull() {
-  if (cooldown()) return;
-  Keyboard.print("git pull");
-  Keyboard.write(KEY_RETURN);
-}
-void doGitPush() {
-  if (cooldown()) return;
-  Keyboard.print("git push");
-  Keyboard.write(KEY_RETURN);
-}
-void doGitStatus() {
-  if (cooldown()) return;
-  Keyboard.print("git status");
-  Keyboard.write(KEY_RETURN);
-}
-void doGitCommit() {
-  if (cooldown()) return;
-  Keyboard.print("git commit -m \"");
-}
 void doGitCommitClose() {
   Keyboard.print("\"");
   Keyboard.write(KEY_RETURN);
 }
-void doGitCheckoutMain() {
-  if (cooldown()) return;
-  Keyboard.print("git checkout main");
-  Keyboard.write(KEY_RETURN);
-}
-void doGitCheckoutB() {
-  if (cooldown()) return;
-  Keyboard.print("git checkout -b ");
-}
-void doGitLog5() {
-  if (cooldown()) return;
-  Keyboard.print("git log --oneline -5");
-  Keyboard.write(KEY_RETURN);
-}
 
-void doCmdP() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('p');
-  Keyboard.release('p');
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdShiftF() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  fwPressKey(KEY_LEFT_SHIFT);
-  Keyboard.press('f');
-  Keyboard.release('f');
-  fwReleaseKey(KEY_LEFT_SHIFT);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdSlash() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('/');
-  Keyboard.release('/');
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdD() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('d');
-  Keyboard.release('d');
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdL() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('l');
-  Keyboard.release('l');
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdShiftK() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  fwPressKey(KEY_LEFT_SHIFT);
-  Keyboard.press('k');
-  Keyboard.release('k');
-  fwReleaseKey(KEY_LEFT_SHIFT);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdW() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('w');
-  Keyboard.release('w');
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdShiftT() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  fwPressKey(KEY_LEFT_SHIFT);
-  Keyboard.press('t');
-  Keyboard.release('t');
-  fwReleaseKey(KEY_LEFT_SHIFT);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdTab() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press(KEY_TAB);
-  Keyboard.release(KEY_TAB);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doCmdShiftTab() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  fwPressKey(KEY_LEFT_SHIFT);
-  Keyboard.press(KEY_TAB);
-  Keyboard.release(KEY_TAB);
-  fwReleaseKey(KEY_LEFT_SHIFT);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doMoveLineUp() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  fwPressKey(KEY_LEFT_ALT);
-  Keyboard.press(KEY_UP_ARROW);
-  Keyboard.release(KEY_UP_ARROW);
-  fwReleaseKey(KEY_LEFT_ALT);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doMoveLineDown() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  fwPressKey(KEY_LEFT_ALT);
-  Keyboard.press(KEY_DOWN_ARROW);
-  Keyboard.release(KEY_DOWN_ARROW);
-  fwReleaseKey(KEY_LEFT_ALT);
-  fwReleaseKey(KEY_LEFT_GUI);
-}
+void doCmdP()        { sendChord(KEY_LEFT_GUI, 0, 'p'); }
+void doCmdShiftF()   { sendChord(KEY_LEFT_GUI, KEY_LEFT_SHIFT, 'f'); }
+void doCmdSlash()    { sendChord(KEY_LEFT_GUI, 0, '/'); }
+void doCmdD()        { sendChord(KEY_LEFT_GUI, 0, 'd'); }
+void doCmdL()        { sendChord(KEY_LEFT_GUI, 0, 'l'); }
+void doCmdShiftK()   { sendChord(KEY_LEFT_GUI, KEY_LEFT_SHIFT, 'k'); }
+void doCmdW()        { sendChord(KEY_LEFT_GUI, 0, 'w'); }
+void doCmdShiftT()   { sendChord(KEY_LEFT_GUI, KEY_LEFT_SHIFT, 't'); }
+void doCmdTab()      { sendChord(KEY_LEFT_GUI, 0, KEY_TAB); }
+void doCmdShiftTab() { sendChord(KEY_LEFT_GUI, KEY_LEFT_SHIFT, KEY_TAB); }
+void doMoveLineUp()  { sendChord(KEY_LEFT_GUI, KEY_LEFT_ALT, KEY_UP_ARROW); }
+void doMoveLineDown(){ sendChord(KEY_LEFT_GUI, KEY_LEFT_ALT, KEY_DOWN_ARROW); }
+void doZoomIn()      { sendChord(KEY_LEFT_GUI, 0, '='); }
+void doZoomOut()     { sendChord(KEY_LEFT_GUI, 0, '-'); }
 
 void doMute() {
   if (cooldown()) return;
@@ -376,19 +196,73 @@ void doMiddleClick() {
   fwMousePress(MOUSE_MIDDLE);
   fwMouseRelease(MOUSE_MIDDLE);
 }
-void doZoomIn() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('=');
-  Keyboard.release('=');
-  fwReleaseKey(KEY_LEFT_GUI);
-}
-void doZoomOut() {
-  if (cooldown()) return;
-  fwPressKey(KEY_LEFT_GUI);
-  Keyboard.press('-');
-  Keyboard.release('-');
-  fwReleaseKey(KEY_LEFT_GUI);
+
+typedef void (*ActionFn)();
+
+struct KeyAction {
+  ActionFn tap;
+  ActionFn hold;
+  ActionFn doubleTap;
+};
+
+#define ACTION(t, h, d) { t, h, d }
+#define NO_ACTION { NULL, NULL, NULL }
+
+const KeyAction actionMap[LAYER_COUNT][BTN_COUNT] = {
+  [LAYER_GIT] = {
+    NO_ACTION,
+    NO_ACTION,
+    NO_ACTION,
+    ACTION(doGitPull,         doGitPush,        NULL),
+    ACTION(doGitStatus,       NULL,             NULL),
+    ACTION(doGitCommit,       doGitCommitClose, NULL),
+    ACTION(doGitCheckoutMain, doGitCheckoutB,   doGitLog5),
+    NO_ACTION,
+    NO_ACTION,
+  },
+  [LAYER_EDITOR] = {
+    NO_ACTION,
+    NO_ACTION,
+    NO_ACTION,
+    ACTION(doCmdP,     NULL,          NULL),
+    ACTION(doCmdShiftF,NULL,          NULL),
+    ACTION(doCmdSlash, NULL,          NULL),
+    ACTION(doCmdD,     doCmdTab,      NULL),
+    ACTION(doCmdL,     doCmdW,        NULL),
+    ACTION(doCmdShiftK,doCmdShiftT,   NULL),
+  },
+  [LAYER_MEDIA] = {
+    NO_ACTION,
+    NO_ACTION,
+    NO_ACTION,
+    ACTION(doMute,       NULL, NULL),
+    ACTION(doMiddleClick,NULL, NULL),
+    NO_ACTION,
+    NO_ACTION,
+    NO_ACTION,
+    NO_ACTION,
+  },
+};
+
+void fireAction(int b, bool isLong, bool isDouble) {
+  releaseModKeys();
+  macroBlinkUntil = millis() + MACRO_BLINK_MS;
+
+  if (b == BTN_LAYER1) { setLayer(LAYER_GIT); return; }
+  if (b == BTN_LAYER2) { setLayer(LAYER_EDITOR); return; }
+  if (b == BTN_LAYER3) { setLayer(LAYER_MEDIA); return; }
+
+  if (layer == LAYER_MEDIA) {
+    if (b == BTN_KEY3) { layer3ZoomMod = !layer3ZoomMod; return; }
+    if (b == BTN_KEY4) { layer3ScrollMod = !layer3ScrollMod; return; }
+  }
+
+  const KeyAction* act = &actionMap[layer][b];
+  ActionFn fn = NULL;
+  if (isDouble && act->doubleTap) fn = act->doubleTap;
+  else if (isLong && act->hold) fn = act->hold;
+  else if (act->tap) fn = act->tap;
+  if (fn) fn();
 }
 
 void runEncoderUp() {
@@ -401,6 +275,7 @@ void runEncoderUp() {
   if (layer3ScrollMod) { Mouse.move(0, 0, -1); return; }
   doVolumeUp();
 }
+
 void runEncoderDown() {
   if (millis() - lastEncoderStep < ENCODER_RATE_MS) return;
   lastEncoderStep = millis();
@@ -412,64 +287,72 @@ void runEncoderDown() {
   doVolumeDown();
 }
 
-void fireAction(int btn, bool isLong, bool isDouble) {
-  releaseModKeys();
-  macroBlinkUntil = millis() + MACRO_BLINK_MS;
-  int L = getLayer();
-  if (btn == 0) { setLayer(LAYER_GIT); return; }
-  if (btn == 1) { setLayer(LAYER_EDITOR); return; }
-  if (btn == 2) { setLayer(LAYER_MEDIA); return; }
-  if (L == LAYER_GIT) {
-    if (btn == 3) { if (isLong) doGitPush(); else doGitPull(); return; }
-    if (btn == 4) { doGitStatus(); return; }
-    if (btn == 5) { if (isLong) doGitCommitClose(); else doGitCommit(); return; }
-    if (btn == 6) {
-      if (isDouble) doGitLog5();
-      else if (isLong) doGitCheckoutB();
-      else doGitCheckoutMain();
-      return;
+void updateLED() {
+  unsigned long now = millis();
+  bool blinking = (now < macroBlinkUntil);
+  bool pulseOn = (now / PULSE_MS) % 2;
+  bool mediaActive = (layer == LAYER_MEDIA && (layer3ZoomMod || layer3ScrollMod));
+
+  int layerLEDs[3];
+  for (int i = 0; i < 3; i++) layerLEDs[i] = (layer == i) ? HIGH : LOW;
+  digitalWrite(ledPins[0], layerLEDs[0]);
+  digitalWrite(ledPins[1], layerLEDs[1]);
+  digitalWrite(ledPins[2], layerLEDs[2]);
+
+  if (blinking) {
+    for (int i = 3; i < LED_COUNT; i++) digitalWrite(ledPins[i], HIGH);
+  } else {
+    int keyStates[4] = { LOW, LOW, LOW, LOW };
+    if (layer == LAYER_MEDIA) {
+      keyStates[0] = layer3ZoomMod ? HIGH : LOW;
+      keyStates[2] = layer3ScrollMod ? HIGH : LOW;
     }
-    if (btn == 7 || btn == 8) return;
-  }
-  if (L == LAYER_EDITOR) {
-    if (btn == 3) { doCmdP(); return; }
-    if (btn == 4) { doCmdShiftF(); return; }
-    if (btn == 5) { doCmdSlash(); return; }
-    if (btn == 6) { if (isLong) doCmdTab(); else doCmdD(); return; }
-    if (btn == 7) { if (isLong) doCmdW(); else doCmdL(); return; }
-    if (btn == 8) { if (isLong) doCmdShiftT(); else doCmdShiftK(); return; }
-  }
-  if (L == LAYER_MEDIA) {
-    if (btn == 3) { doMute(); return; }
-    if (btn == 4) { doMiddleClick(); return; }
-    if (btn == 5) { layer3ZoomMod = !layer3ZoomMod; return; }
-    if (btn == 6) { layer3ScrollMod = !layer3ScrollMod; return; }
-    if (btn == 7 || btn == 8) return;
+    for (int i = 0; i < 4; i++) {
+      int val = keyStates[i];
+      if (mediaActive) {
+        if (i == 0 && layer3ZoomMod) val = pulseOn;
+        if (i == 2 && layer3ScrollMod) val = pulseOn;
+      }
+      digitalWrite(ledPins[3 + i], val);
+    }
   }
 }
 
-void updateLED() {
-  unsigned long now = millis();
-  if (now < macroBlinkUntil) {
-    digitalWrite(key1LED, HIGH);
-    digitalWrite(key2LED, HIGH);
-    digitalWrite(key3LED, HIGH);
-    digitalWrite(key4LED, HIGH);
-  } else {
-    uint8_t pulse = (now / PULSE_MS) % 2;
-    bool pulseActive = (layer == LAYER_MEDIA && (layer3ZoomMod || layer3ScrollMod));
-    digitalWrite(profile1LED, layer == LAYER_GIT ? HIGH : LOW);
-    digitalWrite(profile2LED, layer == LAYER_EDITOR ? HIGH : LOW);
-    digitalWrite(profile3LED, layer == LAYER_MEDIA ? HIGH : LOW);
-    digitalWrite(key1LED, pulseActive && layer3ZoomMod ? pulse : key1State);
-    digitalWrite(key2LED, key2State);
-    digitalWrite(key3LED, pulseActive && layer3ScrollMod ? pulse : key3State);
-    digitalWrite(key4LED, key4State);
+void ledDance() {
+  const int order[] = { 3, 0, 4, 1, 5, 2, 6, 2, 5, 1, 4, 0, 3 };
+  for (int i = 0; i < 13; i++) {
+    digitalWrite(ledPins[order[i]], HIGH);
+    delay(200);
+    digitalWrite(ledPins[order[i]], LOW);
+  }
+  updateLED();
+}
+
+void setup() {
+  pinMode(encoderA, INPUT_PULLUP);
+  pinMode(encoderB, INPUT_PULLUP);
+  for (int i = 0; i < BTN_COUNT; i++) pinMode(btnPins[i], INPUT_PULLUP);
+  for (int i = 0; i < LED_COUNT; i++) pinMode(ledPins[i], OUTPUT);
+
+  if (EEPROM.read(EEPROM_ADDR_MAGIC) == EEPROM_MAGIC) {
+    int saved = EEPROM.read(EEPROM_ADDR_LAYER);
+    if (saved >= LAYER_GIT && saved < LAYER_COUNT) layer = saved;
+  }
+  Keyboard.begin();
+  Mouse.begin();
+  ledDance();
+  for (int i = 0; i < BTN_COUNT; i++) {
+    btn.prev[i] = (digitalRead(btnPins[i]) == LOW);
+    btn.pressTime[i] = 0;
+    btn.pendingTime[i] = 0;
+    btn.longFired[i] = false;
+    btn.lastTap[i] = 0;
   }
 }
 
 void loop() {
   unsigned long now = millis();
+
   int encoderRead = digitalRead(encoderA);
   if (encoderALast == LOW && encoderRead == HIGH) {
     if (digitalRead(encoderB) == LOW) runEncoderDown();
@@ -477,43 +360,39 @@ void loop() {
   }
   encoderALast = encoderRead;
 
-  const int pins[] = { layer1Pin, layer2Pin, layer3Pin, key1Pin, key2Pin, key3Pin, key4Pin, leftPin, rightPin };
   for (int i = 0; i < BTN_COUNT; i++) {
-    bool rawPressed = (digitalRead(pins[i]) == LOW);
+    bool rawPressed = (digitalRead(btnPins[i]) == LOW);
+
     if (rawPressed) {
-      if (!btnPrev[i]) {
-        if (pressPendingTime[i] == 0) pressPendingTime[i] = now;
-        else if ((now - pressPendingTime[i]) >= DEBOUNCE_MS) {
-          btnPressTime[i] = now;
-          btnLongFired[i] = false;
-          btnPrev[i] = true;
-          pressPendingTime[i] = 0;
+      if (!btn.prev[i]) {
+        if (btn.pendingTime[i] == 0) btn.pendingTime[i] = now;
+        else if ((now - btn.pendingTime[i]) >= DEBOUNCE_MS) {
+          btn.pressTime[i] = now;
+          btn.longFired[i] = false;
+          btn.prev[i] = true;
+          btn.pendingTime[i] = 0;
         }
       }
-      if (btnPrev[i] && !btnLongFired[i] && (now - btnPressTime[i]) >= LONG_PRESS_MS) {
-        btnLongFired[i] = true;
-        if (i >= 3) fireAction(i, true, false);
+      if (btn.prev[i] && !btn.longFired[i] && (now - btn.pressTime[i]) >= LONG_PRESS_MS) {
+        btn.longFired[i] = true;
+        if (i >= BTN_KEY1) fireAction(i, true, false);
       }
     } else {
-      pressPendingTime[i] = 0;
-      if (btnPrev[i]) {
-        if (!btnLongFired[i] && (now - btnPressTime[i]) >= DEBOUNCE_MS) {
-          bool doubleTap = allowDoubleTap[i] && (now - lastTapTime[i]) <= DOUBLE_TAP_MS;
+      btn.pendingTime[i] = 0;
+      if (btn.prev[i]) {
+        if (!btn.longFired[i] && (now - btn.pressTime[i]) >= DEBOUNCE_MS) {
+          bool doubleTap = allowDoubleTap[i] && (now - btn.lastTap[i]) <= DOUBLE_TAP_MS;
           if (doubleTap) {
             fireAction(i, false, true);
-            lastTapTime[i] = 0;
+            btn.lastTap[i] = 0;
           } else {
             fireAction(i, false, false);
-            if (allowDoubleTap[i]) lastTapTime[i] = now;
+            if (allowDoubleTap[i]) btn.lastTap[i] = now;
           }
         }
-        btnPrev[i] = false;
+        btn.prev[i] = false;
       }
     }
   }
-  key1State = (layer == LAYER_MEDIA && layer3ZoomMod) ? HIGH : LOW;
-  key2State = LOW;
-  key3State = (layer == LAYER_MEDIA && layer3ScrollMod) ? HIGH : LOW;
-  key4State = LOW;
   updateLED();
 }
