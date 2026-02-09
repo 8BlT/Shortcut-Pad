@@ -14,6 +14,8 @@
 #define LAYER_EDITOR 2
 #define LAYER_MEDIA 3
 
+#define BTN_COUNT 9
+
 const int encoderA = 7;
 const int encoderB = 6;
 const int rightPin = 11;
@@ -44,11 +46,11 @@ unsigned long lastEncoderStep = 0;
 bool layer3ScrollMod = false;
 bool layer3ZoomMod = false;
 
-bool btnPrev[9];
-unsigned long btnPressTime[9];
-unsigned long pressPendingTime[9];
-bool btnLongFired[9];
-unsigned long lastTapTime[9];
+bool btnPrev[BTN_COUNT];
+unsigned long btnPressTime[BTN_COUNT];
+unsigned long pressPendingTime[BTN_COUNT];
+bool btnLongFired[BTN_COUNT];
+unsigned long lastTapTime[BTN_COUNT];
 unsigned long lastMacroTime = 0;
 unsigned long macroBlinkUntil = 0;
 
@@ -60,6 +62,18 @@ bool fwGui = false;
 bool fwMouseLeft = false;
 bool fwMouseRight = false;
 bool fwMouseMiddle = false;
+
+bool allowDoubleTap[BTN_COUNT] = {
+  false, // layer1
+  false, // layer2
+  false, // layer3
+  false, // key1
+  false, // key2
+  false, // key3
+  true,  // key4
+  false, // left
+  false  // right
+};
 
 #define MACRO_BLINK_MS 80
 #define PULSE_MS 200
@@ -123,7 +137,7 @@ void setup() {
   Mouse.begin();
   ledDance();
   const int setupPins[] = { layer1Pin, layer2Pin, layer3Pin, key1Pin, key2Pin, key3Pin, key4Pin, leftPin, rightPin };
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < BTN_COUNT; i++) {
     btnPrev[i] = (digitalRead(setupPins[i]) == LOW);
     btnPressTime[i] = 0;
     pressPendingTime[i] = 0;
@@ -464,7 +478,7 @@ void loop() {
   encoderALast = encoderRead;
 
   const int pins[] = { layer1Pin, layer2Pin, layer3Pin, key1Pin, key2Pin, key3Pin, key4Pin, leftPin, rightPin };
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < BTN_COUNT; i++) {
     bool rawPressed = (digitalRead(pins[i]) == LOW);
     if (rawPressed) {
       if (!btnPrev[i]) {
@@ -484,13 +498,13 @@ void loop() {
       pressPendingTime[i] = 0;
       if (btnPrev[i]) {
         if (!btnLongFired[i] && (now - btnPressTime[i]) >= DEBOUNCE_MS) {
-          bool doubleTap = (i == 6 && (now - lastTapTime[i]) <= DOUBLE_TAP_MS);
+          bool doubleTap = allowDoubleTap[i] && (now - lastTapTime[i]) <= DOUBLE_TAP_MS;
           if (doubleTap) {
             fireAction(i, false, true);
-            if (i == 6) lastTapTime[i] = 0;
+            lastTapTime[i] = 0;
           } else {
             fireAction(i, false, false);
-            if (i == 6) lastTapTime[i] = now;
+            if (allowDoubleTap[i]) lastTapTime[i] = now;
           }
         }
         btnPrev[i] = false;
