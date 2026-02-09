@@ -52,10 +52,49 @@ unsigned long lastTapTime[9];
 unsigned long lastMacroTime = 0;
 unsigned long macroBlinkUntil = 0;
 
+bool fwShift = false;
+bool fwCtrl = false;
+bool fwAlt = false;
+bool fwGui = false;
+
+bool fwMouseLeft = false;
+bool fwMouseRight = false;
+bool fwMouseMiddle = false;
+
 #define MACRO_BLINK_MS 80
 #define PULSE_MS 200
 #define ENCODER_RATE_MS 5
 #define EEPROM_WRITE_INTERVAL_MS 1000
+
+void fwPressKey(uint8_t key) {
+  Keyboard.press(key);
+  if (key == KEY_LEFT_SHIFT) fwShift = true;
+  if (key == KEY_LEFT_CTRL) fwCtrl = true;
+  if (key == KEY_LEFT_ALT) fwAlt = true;
+  if (key == KEY_LEFT_GUI) fwGui = true;
+}
+
+void fwReleaseKey(uint8_t key) {
+  Keyboard.release(key);
+  if (key == KEY_LEFT_SHIFT) fwShift = false;
+  if (key == KEY_LEFT_CTRL) fwCtrl = false;
+  if (key == KEY_LEFT_ALT) fwAlt = false;
+  if (key == KEY_LEFT_GUI) fwGui = false;
+}
+
+void fwMousePress(uint8_t btn) {
+  Mouse.press(btn);
+  if (btn == MOUSE_LEFT) fwMouseLeft = true;
+  if (btn == MOUSE_RIGHT) fwMouseRight = true;
+  if (btn == MOUSE_MIDDLE) fwMouseMiddle = true;
+}
+
+void fwMouseRelease(uint8_t btn) {
+  Mouse.release(btn);
+  if (btn == MOUSE_LEFT) fwMouseLeft = false;
+  if (btn == MOUSE_RIGHT) fwMouseRight = false;
+  if (btn == MOUSE_MIDDLE) fwMouseMiddle = false;
+}
 
 void setup() {
   pinMode(encoderA, INPUT_PULLUP);
@@ -152,13 +191,14 @@ void setLayer(int L) {
 }
 
 void releaseModKeys() {
-  Keyboard.release(KEY_LEFT_SHIFT);
-  Keyboard.release(KEY_LEFT_CTRL);
-  Keyboard.release(KEY_LEFT_GUI);
-  Keyboard.release(KEY_LEFT_ALT);
-  Mouse.release(MOUSE_LEFT);
-  Mouse.release(MOUSE_RIGHT);
-  Mouse.release(MOUSE_MIDDLE);
+  if (fwShift) fwReleaseKey(KEY_LEFT_SHIFT);
+  if (fwCtrl) fwReleaseKey(KEY_LEFT_CTRL);
+  if (fwAlt) fwReleaseKey(KEY_LEFT_ALT);
+  if (fwGui) fwReleaseKey(KEY_LEFT_GUI);
+
+  if (fwMouseLeft) fwMouseRelease(MOUSE_LEFT);
+  if (fwMouseRight) fwMouseRelease(MOUSE_RIGHT);
+  if (fwMouseMiddle) fwMouseRelease(MOUSE_MIDDLE);
 }
 
 bool cooldown() {
@@ -207,99 +247,99 @@ void doGitLog5() {
 
 void doCmdP() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('p');
   Keyboard.release('p');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdShiftF() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
-  Keyboard.press(KEY_LEFT_SHIFT);
+  fwPressKey(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_SHIFT);
   Keyboard.press('f');
   Keyboard.release('f');
-  Keyboard.release(KEY_LEFT_SHIFT);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_SHIFT);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdSlash() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('/');
   Keyboard.release('/');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdD() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('d');
   Keyboard.release('d');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdL() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('l');
   Keyboard.release('l');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdShiftK() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
-  Keyboard.press(KEY_LEFT_SHIFT);
+  fwPressKey(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_SHIFT);
   Keyboard.press('k');
   Keyboard.release('k');
-  Keyboard.release(KEY_LEFT_SHIFT);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_SHIFT);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdW() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('w');
   Keyboard.release('w');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdShiftT() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
-  Keyboard.press(KEY_LEFT_SHIFT);
+  fwPressKey(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_SHIFT);
   Keyboard.press('t');
   Keyboard.release('t');
-  Keyboard.release(KEY_LEFT_SHIFT);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_SHIFT);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdTab() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press(KEY_TAB);
   Keyboard.release(KEY_TAB);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doCmdShiftTab() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
-  Keyboard.press(KEY_LEFT_SHIFT);
+  fwPressKey(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_SHIFT);
   Keyboard.press(KEY_TAB);
   Keyboard.release(KEY_TAB);
-  Keyboard.release(KEY_LEFT_SHIFT);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_SHIFT);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doMoveLineUp() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
-  Keyboard.press(KEY_LEFT_ALT);
+  fwPressKey(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_ALT);
   Keyboard.press(KEY_UP_ARROW);
   Keyboard.release(KEY_UP_ARROW);
-  Keyboard.release(KEY_LEFT_ALT);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_ALT);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doMoveLineDown() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
-  Keyboard.press(KEY_LEFT_ALT);
+  fwPressKey(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_ALT);
   Keyboard.press(KEY_DOWN_ARROW);
   Keyboard.release(KEY_DOWN_ARROW);
-  Keyboard.release(KEY_LEFT_ALT);
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_ALT);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 
 void doMute() {
@@ -319,22 +359,22 @@ void doVolumeDown() {
 }
 void doMiddleClick() {
   if (cooldown()) return;
-  Mouse.press(MOUSE_MIDDLE);
-  Mouse.release(MOUSE_MIDDLE);
+  fwMousePress(MOUSE_MIDDLE);
+  fwMouseRelease(MOUSE_MIDDLE);
 }
 void doZoomIn() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('=');
   Keyboard.release('=');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 void doZoomOut() {
   if (cooldown()) return;
-  Keyboard.press(KEY_LEFT_GUI);
+  fwPressKey(KEY_LEFT_GUI);
   Keyboard.press('-');
   Keyboard.release('-');
-  Keyboard.release(KEY_LEFT_GUI);
+  fwReleaseKey(KEY_LEFT_GUI);
 }
 
 void runEncoderUp() {
